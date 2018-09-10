@@ -1,0 +1,7 @@
+*.pyc
+testfile.txt
+wiki-search-small.xml
+small_index.txt
+/index/*
+a.out
+finalindex.txt
