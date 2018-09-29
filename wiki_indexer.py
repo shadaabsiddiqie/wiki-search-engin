@@ -156,6 +156,15 @@ pathWikiXML = os.path.join(PATH_WIKI_XML, FILENAME_WIKI)
 totalCount = 0
 articleCount = 0
 title = None
+
+# sort variables
+n_files = len(os.listdir('index'))
+fds = {}
+n_lines = {}
+lines_read = {}
+heap = []
+heapq.heapify(heap)
+
 def get_key(val):
     return int(re.search('[0-9]+', val).group())
 
@@ -166,87 +175,62 @@ def file_len(fname):
         raise IOError(err)
     return int(result.strip().split()[0])
 
-def sortFiles():
-    n_files = len(os.listdir('index'))-1
-    fds = {}
-
-    n_lines = {}
-    lines_read = {}
-
-    heap = []
-    heapq.heapify(heap)
-    for i in range(0, n_files):    
+def sortDiffFiles():
+    
+    for i in range(n_files):
         file_name = "index/file" + str(i)
+        fds[i] = open(file_name, "r")
         n_lines[i] = file_len(file_name)
         lines_read[i] = 0
-        fd = open("index/file"+str(i))
-        fds[i] = fd
 
-    for i in range(0, n_files):
-        if lines_read[i] < n_lines[i]:
-            line = str(fds[i].readline())
-            if not ':' in line:
-                print line
-                break
-            tokens = line.split(":")
-            token = tokens[0]        
-            content = tokens[1][:-1]
-            heapq.heappush(heap, [token, content, i])
-            lines_read[i] += 1
+    
+    finalIndexFileName = "finalIndex.txt"
+    fd = open(finalIndexFileName, "w")
 
-    fd = open("finalindex.txt", "w")
-
-    previous_line = ""
-
-    while True:
-        if len(heap) == 0:
-            break
-        l = heapq.heappop(heap)
-        
-        
-        token = l[0]
-        postings_list = l[1]
-        file_no = l[2]    
-        if previous_line.split(":")[0] == token:
-            content1 = previous_line.split(":")[1]
-            list1 = content1.split("|")
-            list2 = postings_list.split("|")
-            list2.extend(list1)
-            list2.sort(key=get_key, reverse = True)
-            modified_line = token + ":" + "|".join(list2)
-            previous_line = modified_line
-            
-        else:
-            fd.write(line)
-            previous_line = line
-
+    for i in range(n_files):
+        file_no = i
         if lines_read[file_no] < n_lines[file_no]:
             line = fds[file_no].readline()
+            cols = line.split(":")
+            token = cols[0]
+            content = cols[1]
+            if content[len(content)-1] == "\n":
+                content = content[:-1]
+            heapq.heappush(heap, (token, content, file_no))
             lines_read[file_no] += 1
-            tokens = line.split(":")            
-            token = tokens[0]
-            content = tokens[1][:-1]
-            heapq.heappush(heap, [token, content, i])        
-            continue
-        
-        success = False
+  
 
-        for i in range(0, n_files):
-            if lines_read[i] < n_lines[i]:
-                line = str(fds[i].readline())            
-                tokens = line.split(":")            
-                token = tokens[0]
-                content = tokens[1][:-1]
-                heapq.heappush(heap, [token, content, i])            
-                lines_read[i] += 1
-                success = True
-                break
-        if not success:
-            break
+    previous_line = ("", "")
+    while len(heap):
+        token, content, file_no = heapq.heappop(heap)
+        previous_token, previous_content = previous_line
+        
+        if previous_token == token:        
+            content = previous_content + "|" + content
+            content = content.split("|")        
+            content.sort(key=get_key)
+            content = '|'.join(content)
+        elif previous_token != "":
+            fd.write(previous_token+":"+previous_content+"\n")
+        previous_line = (token, content)
+            
+        if lines_read[file_no] < n_lines[file_no]:
+            line = fds[file_no].readline()
+            cols = line.split(":")
+            token = cols[0]
+            content = cols[1]
+            if content[len(content)-1] == "\n":
+                content = content[:-1]
+            heapq.heappush(heap, (token, content, file_no))
+            lines_read[file_no] += 1
+
+
+        if len(heap) == 0:
+            fd.write(previous_token+":"+previous_content+"\n")
 
     fd.close()
 
-    for i in range(0, n_files):
+    for i in range(n_files):
         fds[i].close()
 
 for event, elem in etree.iterparse(argv[1], events=('start', 'end')):
@@ -333,20 +317,21 @@ for event, elem in etree.iterparse(argv[1], events=('start', 'end')):
 
 write_title_disk()
 
+
 #sourting main index
-sortFiles()
+sortDiffFiles()
 
-f = open('finalindex.txt',"r")
+f = open('finalIndex.txt',"r")
 
-lenght_file = file_len('finalindex.txt')
+lenght_file = file_len('finalIndex.txt')
 
-f_finalTFIDF = open('all.txt','w')
-f_tTFIDF = open('title.txt','w')
-f_iTFIDF = open('infobox.txt','w')
-f_eTFIDF = open('external.txt','w')
-f_cTFIDF = open('category.txt','w')
-f_bTFIDF = open('body.txt','w')
-f_rTFIDF = open('reference.txt','w')
+f_finalTFIDF = open('data/all.txt','w')
+f_tTFIDF = open('data/title.txt','w')
+f_iTFIDF = open('data/infobox.txt','w')
+f_eTFIDF = open('data/external.txt','w')
+f_cTFIDF = open('data/category.txt','w')
+f_bTFIDF = open('data/body.txt','w')
+f_rTFIDF = open('data/reference.txt','w')
 
 for i in range(lenght_file):
     line = f.readline()
@@ -378,39 +363,39 @@ for i in range(lenght_file):
             s3 = doc.split('t')
             tId = int(re.search('[0-9]+', s3[1]).group())
             tTf = round(math.log(1 +tId),3)#tiecbr
-            term_data_t = term_data_t +str(docId)+' '+str(tTf*Idf)+'|'
+            term_data_t = term_data_t +str(docId)+' '+str(round(tTf*Idf,3))+'|'
         if 'i' in doc:
             s4 = doc.split('i')
             iId = int(re.search('[0-9]+', s4[1]).group())
             iTf = round(math.log(1 +iId),3)
-            term_data_i = term_data_i +str(docId)+' '+str(iTf*Idf)+'|'
+            term_data_i = term_data_i +str(docId)+' '+str(round(iTf*Idf,3))+'|'
         
         if 'e' in doc:
             s5 = doc.split('e')
             eId = int(re.search('[0-9]+', s5[1]).group())
             eTf = round(math.log(1 +eId),3)
-            term_data_e = term_data_t +str(docId)+' '+str(eTf*Idf)+'|'
+            term_data_e = term_data_e +str(docId)+' '+str(round(eTf*Idf,3))+'|'
         
         if 'c' in doc:
             s6 = doc.split('c')
             cId = int(re.search('[0-9]+', s6[1]).group())
             cTf = round(math.log(1 +cId),3)
-            term_data_c = term_data_t +str(docId)+' '+str(cTf*Idf)+'|'
+            term_data_c = term_data_c +str(docId)+' '+str(round(cTf*Idf,3))+'|'
         
         if 'b' in doc:
             s7 = doc.split('b')
             bId = int(re.search('[0-9]+', s7[1]).group())
             bTf = round(math.log(1 +bId),3)
-            term_data_b = term_data_t +str(docId)+' '+str(bTf*Idf)+'|'
+            term_data_b = term_data_b+str(docId)+' '+str(round(bTf*Idf,3))+'|'
         
         if 'r' in doc:
             s8 = doc.split('r')
             rId = int(re.search('[0-9]+', s8[1]).group())
             rTf = round(math.log(1 +rId),3)
-            term_data_r = term_data_t +str(docId)+' '+str(rTf*Idf)+'|'
+            term_data_r = term_data_r +str(docId)+' '+str(round(rTf*Idf,3))+'|'
 
-        Tf = round(math.log(1 + tId + iId + eId + cId + bId + rId),3)
-        term_data = term_data +str(docId) +' '+str(Tf*Idf)+'|'  
+        Tf = round(math.log(1 + 2*tId + iId + eId + 1.5*cId + bId + rId),3)
+        term_data = term_data +str(docId) +' '+str(round(Tf*Idf,3))+'|'  
     
     if(term_data!=''):
         f_finalTFIDF.write(term+':'+term_data+'\n')
